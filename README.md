@@ -1,35 +1,61 @@
-# Synthetic Question Dataset for Off-Topic Detection
+# Synthetic Question Dataset and Prompts for Off-Topic Detection
 
 Supplementary release accompanying a paper currently under double-blind review.
 
-This repository contains a synthetic dataset of student-style questions across
-three university subjects (chemistry, sociology, computer science / algorithms),
-together with the generation prompts used to produce them. The dataset is
-intended for training and evaluating off-topic / on-topic classifiers for
-educational LLM tutors.
+This repository contains (a) a synthetic dataset of student-style questions
+across three university subjects (chemistry, sociology, computer science /
+algorithms), and (b) the full prompt set used in the paper, including the
+**decoupled classifier prompt** introduced in the revision.
+
+## For reviewers — start here
+
+If you are looking for the decoupled-classifier prompt referenced in the
+revision (system message, user-message template, the 12 few-shot exemplars
+across the three subjects, the RAG variant, and the API parameters), it is
+in `APPENDIX_PROMPTS.txt`, **Section 8 (Decoupled Classifier Prompt)** and
+**Section 9 (API Parameters)**. These are the items most relevant to
+evaluating the new T1 / T2 experiments.
+
+The rest of `APPENDIX_PROMPTS.txt` (Sections 1–7) reproduces the prompt
+set from the original submission — data generation, tutor system prompts
+at the three strictness levels, the PARDEN follow-up, ground-truth
+labelling prompts, and the detection markers.
 
 ## Contents
 
-- `synthetic_questions_chemistry.csv` — questions for the chemistry domain.
-- `synthetic_questions_sociology.csv` — questions for the sociology domain.
-- `synthetic_questions_computer_science_algorithms.csv` — questions for the
-  CS / algorithms domain.
+- `APPENDIX_PROMPTS.txt` — all prompts used in the paper.
+  - Sections 1–7: original-submission prompts (data generation, tutor
+    system prompts, PARDEN, ground-truth labelling, markers, subjects,
+    models).
+  - **Section 8: decoupled classifier prompt (NEW — added in revision).**
+    System message, user-message template, RAG-augmented variant, and
+    all twelve few-shot exemplars (4 per subject × 3 subjects).
+  - **Section 9: API parameters** (model, temperature, max_tokens,
+    response_format, sampling seed, n per cell, RAG configuration).
+- `synthetic_questions_simple.csv` — the evaluation question pool. Four
+  columns: `subject, category, question, label`. 500 items per
+  (subject, category) cell — 3 subjects × 4 categories × 500 = 6 000 rows.
+  This is the file sampled from in the paper's experiments (n=100 per
+  cell, seed=42).
+- `synthetic_questions_chemistry.csv`,
+  `synthetic_questions_sociology.csv`,
+  `synthetic_questions_computer_science_algorithms.csv` — per-subject
+  experimental run logs from the original submission (one row per
+  (question × prompt-strictness × model) cell, with the tutor response,
+  PARDEN follow-up, and detection flags).
 - `synthetic_questions_all_subjects.csv` — concatenation of the three
-  per-subject files.
-- `synthetic_questions_simple.csv` — a smaller, balanced sample used for the
-  main experiments in the paper (500 rows per (subject, category) cell).
-- `APPENDIX_PROMPTS.txt` — the prompt templates used to generate each
-  category of question.
+  per-subject run-log files.
 
-## Labels
+## Category definitions
 
-Each row carries a `category` label drawn from:
-
-- `on-topic` — standard in-domain questions.
-- `off-topic` — clearly unrelated questions.
-- `hard-on-topic` — ambiguous but still in-domain.
-- `hard-off-topic` — uses domain vocabulary deceptively (e.g. "chemistry
-  between people" for the chemistry domain).
+- `on-topic` — standard in-domain questions a first-year student would
+  ask.
+- `hard-on-topic` — ambiguous, advanced, or awkwardly phrased, but the
+  intent is still to learn the subject.
+- `off-topic` — clearly unrelated to the subject.
+- `hard-off-topic` — uses domain vocabulary or concepts but the intent
+  is not about the subject (e.g. the catalysis-of-influencers example
+  in Section 8.4 of the appendix).
 
 ## License
 

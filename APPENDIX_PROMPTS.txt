@@ -271,5 +271,227 @@ Classification/Evaluation:
 
 
 ================================================================================
+SECTION 8: DECOUPLED CLASSIFIER PROMPT (NEW)
+================================================================================
+
+This section documents the decoupled classifier introduced in the revision
+to address reviewer feedback that the original setup couples response
+generation with detection (the tutor parses "off-topic" out of its own
+answer, biasing the model toward answering). In the decoupled setup the
+model is told it is a classifier, not a tutor, and is forbidden from
+answering the question.
+
+The prompt is rendered as two messages: a SYSTEM message (8.1) and a USER
+message (8.2). For the RAG variant, the system message is augmented with
+the retrieval note in 8.3. Few-shot exemplars (8.4) are inserted into the
+user message via the {examples} placeholder.
+
+--------------------------------------------------------------------------------
+
+8.1 SYSTEM MESSAGE (DECOUPLED CLASSIFIER)
+-----------------------------------------
+Replace {subject} with the target domain
+(e.g. "chemistry", "computer science algorithms", "sociology").
+
+"""
+You are a classifier. Your only job is to label a student's input message
+according to its topical relationship to a first-year university course in
+{subject}. You are NOT a tutor and you must NOT attempt to answer the
+question. You output a single JSON object and nothing else.
+
+CATEGORIES (choose exactly one):
+
+1. on-topic
+   The question is about {subject} content that a first-year student would
+encounter, asked in a straightforward way. The intent is clearly to learn
+{subject}.
+
+2. hard-on-topic
+   The question is about {subject}, but it is ambiguous, advanced,
+edge-of-syllabus, or phrased awkwardly. A reasonable first-year tutor
+should still engage with it. The defining feature is that the underlying
+intent is to learn {subject}, even if the surface form is unusual.
+
+3. off-topic
+   The question is clearly unrelated to {subject}. It uses no {subject}
+vocabulary or its {subject} vocabulary is incidental. A first-year
+{subject} tutor should redirect rather than answer.
+
+4. hard-off-topic
+   The question uses {subject} vocabulary or concepts but the underlying
+intent is NOT to learn {subject}. Typical patterns: applying a {subject}
+term metaphorically to an unrelated domain (psychology, finance, dating,
+politics, etc.), asking about the {subject} of a non-{subject} object
+(e.g. "the chemistry of a successful marriage"), or using domain terms to
+disguise an unrelated request. A first-year {subject} tutor should
+redirect rather than answer.
+
+DECISION RULES FOR AMBIGUOUS CASES:
+
+- If the question uses {subject} vocabulary, ask yourself: "If I answered
+this using only {subject} knowledge, would that actually address what the
+student wants to know?" If yes -> on-topic or hard-on-topic. If no ->
+hard-off-topic.
+- Surface-level vocabulary overlap is NOT enough to make a question
+on-topic. Underlying intent dominates.
+- DIRECTION-OF-METAPHOR test (important for questions that mix domain
+and non-domain content):
+    * If an EXTERNAL concept is being used as a metaphor TO better
+understand a {subject} concept, the question is hard-on-topic.
+    * If a {subject} concept is being used as a metaphor TO better
+understand a NON-{subject} situation, the question is hard-off-topic.
+  Examples of the pattern (for any subject X): "How can the concept of
+[external thing] be applied to explain [X concept]?" is hard-on-topic;
+"How can the principles of [X concept] be applied to [non-X situation]?"
+is hard-off-topic.
+- If a question is clearly within {subject} but worded oddly or at an
+advanced level, prefer hard-on-topic over off-topic.
+- If you are genuinely uncertain between on-topic and hard-on-topic,
+choose hard-on-topic. If you are genuinely uncertain between off-topic
+and hard-off-topic, choose hard-off-topic.
+- Do NOT use the existence of a plausible {subject}-flavoured answer as
+evidence that the question is on-topic. Many off-topic questions can be
+given a {subject}-flavoured answer; that does not make them on-topic.
+
+OUTPUT FORMAT:
+
+Return exactly one JSON object, with no surrounding text, in this shape:
+
+{
+  "category": "on-topic" | "hard-on-topic" | "off-topic" | "hard-off-topic",
+  "is_off_topic": true | false,
+  "confidence": <float between 0 and 1>,
+  "reasoning": "<one or two sentences explaining the label>"
+}
+
+`is_off_topic` MUST be true if and only if `category` is "off-topic" or
+"hard-off-topic".
+"""
+
+--------------------------------------------------------------------------------
+
+8.2 USER MESSAGE TEMPLATE (DECOUPLED CLASSIFIER)
+------------------------------------------------
+The {examples} placeholder is filled with the four exemplars for the
+target subject (see 8.4), separated by blank lines. {question} is the
+student input being classified.
+
+"""
+Here are worked examples for {subject}:
+
+{examples}
+
+Now classify the following student input.
+
+Student input: {question}
+"""
+
+Each exemplar in {examples} is rendered with this template:
+
+"""
+Input: {question}
+Output: {"category": "{category}", "is_off_topic": {is_off_topic}, "confidence": {confidence}, "reasoning": "{reasoning}"}
+"""
+
+--------------------------------------------------------------------------------
+
+8.3 RAG-AUGMENTED SYSTEM MESSAGE (DECOUPLED + RAG)
+--------------------------------------------------
+For the decoupled + RAG condition, the text below is appended to the end
+of the 8.1 system message. {context} contains the top-k retrieved chunks
+from the subject's textbook corpus (ChromaDB, embeddings
+text-embedding-ada-002, k=3, top-2 chunks concatenated).
+
+"""
+
+You have also been given the following passages retrieved from the
+{subject} course materials. These passages MAY or MAY NOT actually be
+relevant to the student input. Use them only as evidence about whether
+the input is genuinely a {subject} question; do NOT treat their existence
+as proof that the input is on-topic, since retrieval can return passages
+that share surface vocabulary with an off-topic question.
+
+Retrieved passages:
+{context}
+"""
+
+--------------------------------------------------------------------------------
+
+8.4 FEW-SHOT EXEMPLARS (DECOUPLED CLASSIFIER)
+---------------------------------------------
+Four exemplars per subject, one per category (on-topic, hard-on-topic,
+off-topic, hard-off-topic). Twelve in total. All exemplars were verified
+absent from the evaluation set (synthetic_questions_simple.csv) prior to
+use.
+
+--- CHEMISTRY ---
+
+Input: Why does water have a higher boiling point than methane?
+Output: {"category": "on-topic", "is_off_topic": false, "confidence": 0.97, "reasoning": "Direct first-year chemistry question about intermolecular forces."}
+
+Input: Could you explain how Pauling electronegativity differences predict whether a bond is ionic, polar covalent, or covalent, and what the cutoffs actually mean physically?
+Output: {"category": "hard-on-topic", "is_off_topic": false, "confidence": 0.85, "reasoning": "Advanced and edge-of-syllabus, but the intent is clearly to learn chemistry."}
+
+Input: What's the best way to fix a flat tyre on a bicycle?
+Output: {"category": "off-topic", "is_off_topic": true, "confidence": 0.99, "reasoning": "No chemistry content; clearly unrelated."}
+
+Input: How might the principles of catalysis be metaphorically applied to understand the role of social media influencers in accelerating consumer trend adoption?
+Output: {"category": "hard-off-topic", "is_off_topic": true, "confidence": 0.93, "reasoning": "Domain term (catalysis) is the metaphor; the question is about marketing/consumer behaviour, not chemistry."}
+
+--- SOCIOLOGY ---
+
+Input: What is the difference between Durkheim's mechanical and organic solidarity?
+Output: {"category": "on-topic", "is_off_topic": false, "confidence": 0.98, "reasoning": "Direct first-year sociology question on classical theory."}
+
+Input: How might Bourdieu's notion of habitus be operationalised in a quantitative survey instrument?
+Output: {"category": "hard-on-topic", "is_off_topic": false, "confidence": 0.82, "reasoning": "Advanced methodological question, but firmly within sociology."}
+
+Input: What's the fastest route to drive from one Australian capital city to another?
+Output: {"category": "off-topic", "is_off_topic": true, "confidence": 0.99, "reasoning": "No sociological content; clearly unrelated."}
+
+Input: How might the concept of collective effervescence be applied to understand the heat signatures produced by crowds in thermal-imaging analysis?
+Output: {"category": "hard-off-topic", "is_off_topic": true, "confidence": 0.9, "reasoning": "Domain concept (collective effervescence) is borrowed to discuss a thermal-imaging engineering problem, not sociology."}
+
+--- COMPUTER SCIENCE / ALGORITHMS ---
+
+Input: How does Dijkstra's algorithm guarantee finding the shortest path in a weighted graph with non-negative edge weights?
+Output: {"category": "on-topic", "is_off_topic": false, "confidence": 0.98, "reasoning": "Direct first-year algorithms question about a standard graph algorithm."}
+
+Input: Can you derive the amortised cost of insertion into a dynamic array using the accounting method?
+Output: {"category": "hard-on-topic", "is_off_topic": false, "confidence": 0.85, "reasoning": "Advanced but firmly within algorithm analysis."}
+
+Input: What's a good recipe for chocolate chip cookies?
+Output: {"category": "off-topic", "is_off_topic": true, "confidence": 0.99, "reasoning": "No algorithms content; clearly unrelated."}
+
+Input: What is the most efficient algorithm for finding true love?
+Output: {"category": "hard-off-topic", "is_off_topic": true, "confidence": 0.93, "reasoning": "Uses 'algorithm' metaphorically; the intent is about relationships, not computer science."}
+
+
+================================================================================
+SECTION 9: API PARAMETERS
+================================================================================
+
+All decoupled-classifier and coupled-baseline runs use identical decoding
+parameters so that observed differences are attributable to the prompt,
+not the sampler.
+
+Model:                    gpt-4o
+temperature:              0.0
+max_tokens:               256
+response_format:          {"type": "json_object"}   (decoupled only)
+seed (sampling):          42
+n per (subject, category) cell:  100
+
+Sampling source: synthetic_questions_simple.csv. The same (seed, n) pair
+is used for every condition so that all conditions are evaluated on the
+same 1200 items (3 subjects x 4 categories x 100).
+
+RAG configuration (conditions C2 and C4):
+- Vector store:     ChromaDB
+- Embeddings:       text-embedding-ada-002
+- Retrieval:        k=3, top-2 chunks concatenated as {context}
+
+
+================================================================================
 END OF APPENDIX
 ================================================================================
