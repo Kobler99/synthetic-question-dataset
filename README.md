@@ -7,20 +7,6 @@ across three university subjects (chemistry, sociology, computer science /
 algorithms), and (b) the full prompt set used in the paper, including the
 **decoupled classifier prompt** introduced in the revision.
 
-## For reviewers — start here
-
-If you are looking for the decoupled-classifier prompt referenced in the
-revision (system message, user-message template, the 12 few-shot exemplars
-across the three subjects, the RAG variant, and the API parameters), it is
-in `APPENDIX_PROMPTS.txt`, **Section 8 (Decoupled Classifier Prompt)** and
-**Section 9 (API Parameters)**. These are the items most relevant to
-evaluating the new T1 / T2 experiments.
-
-The rest of `APPENDIX_PROMPTS.txt` (Sections 1–7) reproduces the prompt
-set from the original submission — data generation, tutor system prompts
-at the three strictness levels, the PARDEN follow-up, ground-truth
-labelling prompts, and the detection markers.
-
 ## Contents
 
 - `APPENDIX_PROMPTS.txt` — all prompts used in the paper.
